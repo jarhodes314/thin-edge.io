@@ -3016,6 +3016,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tedge_http_ext"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "tedge_actors",
+]
+
+[[package]]
 name = "tedge_test_utils"
 version = "0.8.1"
 dependencies = [
