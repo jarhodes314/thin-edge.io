@@ -1,9 +1,9 @@
 use async_trait::async_trait;
-use mqtt_channel::{Message, MqttError, SinkExt, StreamExt, TopicFilter};
+use mqtt_channel::{MqttError, SinkExt, StreamExt, TopicFilter};
 use tedge_actors::mpsc::{channel, Receiver, Sender};
 use tedge_actors::{
     Actor, ActorBuilder, ChannelError, DynSender, LinkError, MessageBox, PeerLinker, RuntimeError,
-    RuntimeHandle, SimpleMessageBox,
+    RuntimeHandle,
 };
 
 pub type MqttMessage = mqtt_channel::Message;
@@ -28,6 +28,18 @@ impl MqttActorBuilder {
         }
     }
 
+    // This method makes explicit this actor can consume MqttMessage and send MqttMessage.
+    // However, returning a Receiver where the peer will receive the messages received from its subscription
+    // put the burden on the receiving peer which has no more freedom on organising its channel.
+    // pub fn register_peer(
+    //     &mut self,
+    //     topics: TopicFilter,
+    // ) -> (Sender<MqttMessage>, Receiver<MqttMessage>) {
+    //     let (sender, receiver) = channel(10);
+    //     self.subscriber_addresses.push((topics, sender.into()));
+    //     (self.publish_channel.0.clone(), receiver)
+    // }
+
     pub fn add_client(
         &mut self,
         subscriptions: TopicFilter,
@@ -41,7 +53,7 @@ impl MqttActorBuilder {
 impl PeerLinker<MqttMessage, MqttMessage> for MqttActorBuilder {
     fn connect(
         &mut self,
-        output_sender: DynSender<MqttMessage>,
+        _output_sender: DynSender<MqttMessage>,
     ) -> Result<DynSender<MqttMessage>, LinkError> {
         todo!()
         // Indeed, this PeerLinker abstraction abstracts away too many things!
