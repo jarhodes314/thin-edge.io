@@ -17,10 +17,11 @@ use tedge_actors::Service;
 use tedge_actors::ServiceActor;
 use tedge_actors::ServiceMessageBoxBuilder;
 
+pub type JwtRequest = ();
 pub type JwtResult = Result<Option<String>, SmartRestDeserializerError>;
 
 /// Retrieves JWT tokens authenticating the device
-pub type JwtRetriever = RequestResponseHandler<(), JwtResult>;
+pub type JwtRetriever = RequestResponseHandler<JwtRequest, JwtResult>;
 
 /// A JwtRetriever that gets JWT tokens from C8Y over MQTT
 pub struct C8YJwtRetriever {
@@ -35,7 +36,7 @@ impl C8YJwtRetriever {
 
 #[async_trait]
 impl Service for C8YJwtRetriever {
-    type Request = ();
+    type Request = JwtRequest;
     type Response = JwtResult;
 
     async fn handle(&mut self, _request: Self::Request) -> Self::Response {
@@ -73,7 +74,7 @@ pub struct ConstJwtRetriever {
 
 #[async_trait]
 impl Service for ConstJwtRetriever {
-    type Request = ();
+    type Request = JwtRequest;
     type Response = JwtResult;
 
     async fn handle(&mut self, _request: Self::Request) -> Self::Response {
@@ -82,12 +83,12 @@ impl Service for ConstJwtRetriever {
 }
 
 /// Build an actor from a JwtRetriever service
-pub struct JwtRetrieverBuilder<S: Service<Request = (), Response = JwtResult>> {
+pub struct JwtRetrieverBuilder<S: Service<Request = JwtRequest, Response = JwtResult>> {
     actor: ServiceActor<S>,
     message_box: ServiceMessageBoxBuilder<(), JwtResult>,
 }
 
-impl<S: Service<Request = (), Response = JwtResult>> JwtRetrieverBuilder<S> {
+impl<S: Service<Request = JwtRequest, Response = JwtResult>> JwtRetrieverBuilder<S> {
     pub fn new(service: S) -> Self {
         let actor = ServiceActor::new(service);
         let message_box = ServiceMessageBoxBuilder::new(10);
@@ -96,13 +97,15 @@ impl<S: Service<Request = (), Response = JwtResult>> JwtRetrieverBuilder<S> {
 }
 
 #[async_trait]
-impl<S: Service<Request = (), Response = JwtResult>> ActorBuilder for JwtRetrieverBuilder<S> {
+impl<S: Service<Request = JwtRequest, Response = JwtResult>> ActorBuilder
+    for JwtRetrieverBuilder<S>
+{
     async fn spawn(self, runtime: &mut RuntimeHandle) -> Result<(), RuntimeError> {
         runtime.run(self.actor, self.message_box.build()).await
     }
 }
 
-impl<S: Service<Request = (), Response = JwtResult>>
+impl<S: Service<Request = JwtRequest, Response = JwtResult>>
     ConnectionBuilder<(), JwtResult, (), Infallible> for JwtRetrieverBuilder<S>
 {
     fn connect(
