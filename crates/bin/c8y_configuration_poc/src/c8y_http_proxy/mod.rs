@@ -1,18 +1,22 @@
+use crate::c8y_http_proxy::credentials::JwtResult;
+use crate::c8y_http_proxy::credentials::JwtRetriever;
+use crate::c8y_http_proxy::credentials::JwtRetrieverBuilder;
 use crate::c8y_http_proxy::handle::C8YHttpProxy;
 use crate::c8y_http_proxy::messages::C8YRestRequest;
 use crate::c8y_http_proxy::messages::C8YRestResponse;
 use async_trait::async_trait;
+use std::convert::Infallible;
 use tedge_actors::mpsc;
 use tedge_actors::ActorBuilder;
+use tedge_actors::ConnectionBuilder;
 use tedge_actors::DynSender;
-use tedge_actors::LinkError;
 use tedge_actors::RuntimeError;
 use tedge_actors::RuntimeHandle;
 use tedge_http_ext::HttpConnectionBuilder;
 use tedge_http_ext::HttpHandle;
 
 mod actor;
-mod credentials;
+pub mod credentials;
 pub mod handle;
 pub mod messages;
 
@@ -37,29 +41,28 @@ pub struct C8YHttpProxyBuilder {
     /// If None is given, there is no point to spawn this actor
     responses: Option<DynSender<C8YRestResponse>>,
 
-    /// To be connected to the HTTP actor
-    ///
-    /// If None is given, this actor cannot run
-    http: Option<HttpHandle>,
+    /// Connection the HTTP actor
+    http: HttpHandle,
+
+    /// Connection the JWT token retriever
+    jwt: JwtRetriever,
 }
 
 impl C8YHttpProxyBuilder {
-    pub fn new(config: C8YHttpConfig) -> Self {
+    pub fn new(
+        config: C8YHttpConfig,
+        http: &mut impl HttpConnectionBuilder,
+        jwt: &mut impl ConnectionBuilder<(), JwtResult, (), Infallible>,
+    ) -> Self {
+        let http = http.new_request_handle(());
+        let jwt = jwt.new_request_handle(());
         C8YHttpProxyBuilder {
             _config: config,
             requests: mpsc::channel(10),
             responses: None,
-            http: None,
+            http,
+            jwt,
         }
-    }
-
-    /// Connect this instance to some http connection provider
-    pub fn with_http_connection(
-        &mut self,
-        http: &mut impl HttpConnectionBuilder,
-    ) -> Result<(), LinkError> {
-        self.http = Some(http.new_request_handle(()));
-        Ok(())
     }
 
     /// Return a new handle to the actor under construction
