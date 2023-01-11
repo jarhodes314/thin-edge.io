@@ -23,8 +23,7 @@ async fn main() -> anyhow::Result<()> {
     // Create actor instances
     let mut mqtt_actor = MqttActorBuilder::new(mqtt_channel::Config::default());
     let mut jwt_actor = C8YJwtRetriever::builder(mqtt_channel::Config::default());
-    let mut http_actor =
-        HttpActorBuilder::new(HttpConfig::default())?;
+    let mut http_actor = HttpActorBuilder::new(HttpConfig::default())?;
     let mut c8y_http_proxy_actor = C8YHttpProxyBuilder::new(
         C8YHttpConfig::new("thin-edge-io.eu-latest.cumulocity.com", "albin-tedge"), //FIXME: Read from tedge config
         &mut http_actor,
