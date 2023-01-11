@@ -1,7 +1,8 @@
-use crate::{ChannelError, NullSender};
+use crate::ChannelError;
 use crate::DynSender;
 use crate::KeyedSender;
 use crate::Message;
+use crate::NullSender;
 use crate::RequestResponseHandler;
 use crate::SenderVec;
 use async_trait::async_trait;
