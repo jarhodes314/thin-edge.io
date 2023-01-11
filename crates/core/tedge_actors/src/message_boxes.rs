@@ -247,7 +247,8 @@ pub struct ConcurrentServiceMessageBox<Request, Response> {
 
 type PendingResult<R> = tokio::task::JoinHandle<R>;
 
-type RawClientMessageBox<Request, Response> = SimpleMessageBox<(ClientId, Response), (ClientId, Request)>;
+type RawClientMessageBox<Request, Response> =
+    SimpleMessageBox<(ClientId, Response), (ClientId, Request)>;
 
 impl<Request: Message, Response: Message> ConcurrentServiceMessageBox<Request, Response> {
     pub(crate) fn new(
@@ -268,10 +269,7 @@ impl<Request: Message, Response: Message> ConcurrentServiceMessageBox<Request, R
     pub fn new_channel(
         name: &str,
         max_concurrency: usize,
-    ) -> (
-        RawClientMessageBox<Request, Response>,
-        Self,
-    ) {
+    ) -> (RawClientMessageBox<Request, Response>, Self) {
         let (clients_box, service_box) = SimpleMessageBox::new_channel(name);
         let concurrent_service_box = ConcurrentServiceMessageBox::new(max_concurrency, service_box);
         (clients_box, concurrent_service_box)
