@@ -1,4 +1,5 @@
-use crate::{Builder, ChannelError};
+use crate::Builder;
+use crate::ChannelError;
 use crate::Message;
 use crate::MessageBox;
 use crate::MessageBoxConnector;
