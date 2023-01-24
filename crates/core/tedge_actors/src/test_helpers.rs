@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 use crate::mpsc;
 use crate::DynSender;
 use crate::Message;
@@ -6,6 +5,7 @@ use crate::MessageBoxPort;
 use crate::NullSender;
 use crate::Sender;
 use futures::StreamExt;
+use std::fmt::Debug;
 
 /// A message that can be broadcast
 pub trait MessagePlus: Message + Clone + Eq {}
@@ -24,6 +24,12 @@ pub struct Probe<I: MessagePlus, O: MessagePlus> {
 pub enum ProbeEvent<I: MessagePlus, O: MessagePlus> {
     Recv(I),
     Send(O),
+}
+
+impl<I: MessagePlus, O: MessagePlus> Default for Probe<I, O> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<I: MessagePlus, O: MessagePlus> Probe<I, O> {
