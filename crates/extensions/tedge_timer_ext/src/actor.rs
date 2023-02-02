@@ -150,7 +150,6 @@ impl Actor for TimerActor {
     }
 
     async fn run(mut self, mut messages: Self::MessageBox) -> Result<(), ChannelError> {
-        dbg!("XOXOX starting");
         loop {
             if let Some(current) = self.current_timer.take() {
                 let time_elapsed = current.sleep;
