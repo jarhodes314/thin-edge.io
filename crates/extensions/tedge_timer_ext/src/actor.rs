@@ -150,6 +150,7 @@ impl Actor for TimerActor {
     }
 
     async fn run(mut self, mut messages: Self::MessageBox) -> Result<(), ChannelError> {
+        dbg!("XOXOX starting");
         loop {
             if let Some(current) = self.current_timer.take() {
                 let time_elapsed = current.sleep;
@@ -157,6 +158,11 @@ impl Actor for TimerActor {
                 // Wait either for a new request or the current timer to elapse
                 tokio::select! {
                     () = time_elapsed => {
+                        let caller = current_timer.client_id;
+                        let response = Timeout {
+                            event: current_timer.event_id
+                        };
+                        messages.send((caller, response)).await?;
                         self.start_next_timer()
                     },
                     maybe_message = messages.recv() => {
