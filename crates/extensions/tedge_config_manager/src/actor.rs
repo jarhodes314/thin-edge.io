@@ -198,7 +198,7 @@ impl ConfigManagerActor {
             .plugin_config
             .get_file_entry_from_type(&request.config_type)?;
 
-        let config_content = std::fs::read_to_string(&file_entry.path)?;
+        let config_content = std::fs::read(&file_entry.path)?;
 
         self.upload_config_file(&request.tedge_url, config_content)
             .await?;
@@ -214,10 +214,16 @@ impl ConfigManagerActor {
     async fn upload_config_file(
         &mut self,
         upload_url: &str,
-        config_content: String,
+        config_content: Vec<u8>,
     ) -> Result<(), ConfigManagementError> {
+        let content_type = if std::str::from_utf8(&config_content).is_ok() {
+            "text/plain"
+        } else {
+            "application/octet-stream"
+        };
+
         let req_builder = HttpRequestBuilder::put(upload_url)
-            .header("Content-Type", "text/plain")
+            .header("Content-Type", content_type)
             .body(config_content);
 
         let request = req_builder.build()?;
