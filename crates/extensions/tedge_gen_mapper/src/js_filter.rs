@@ -17,7 +17,7 @@ use tracing::debug;
 
 #[derive(Clone)]
 pub struct JsFilter {
-    path: PathBuf,
+    pub path: PathBuf,
     module_id: ModuleId,
     config: Value,
     tick_every_seconds: u64,
