@@ -64,7 +64,7 @@ pub fn required_paths(config: &TEdgeConfig, user: &str, group: &str) -> Vec<Path
     let dir_perms = PermissionEntry::owned(user.to_string(), group.to_string(), 0o775);
 
     vec![
-        PathDef::dir(&*config_dir, dir_perms.clone()),
+        PathDef::dir(config_dir, dir_perms.clone()),
         PathDef::dir(config_dir.join("mosquitto-conf"), dir_perms.clone()),
         PathDef::dir(config_dir.join("operations"), dir_perms.clone()),
         PathDef::dir(config_dir.join("operations").join("c8y"), dir_perms.clone()),

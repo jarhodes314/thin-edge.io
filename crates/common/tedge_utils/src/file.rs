@@ -370,7 +370,7 @@ pub async fn change_user_and_group(
         .unwrap()
 }
 
-pub fn change_user_and_group_sync(path: &Path, user: &str, group: &str) -> Result<(), FileError> {
+fn change_user_and_group_sync(path: &Path, user: &str, group: &str) -> Result<(), FileError> {
     match (user, group) {
         ("", "") => return Ok(()),
         ("", group) => return change_group_sync(path, group),
@@ -467,14 +467,14 @@ fn change_group_sync(file: impl AsRef<Path>, group: &str) -> Result<(), FileErro
     Ok(())
 }
 
-pub async fn change_mode(file: impl AsRef<Path>, mode: u32) -> Result<(), FileError> {
+async fn change_mode(file: impl AsRef<Path>, mode: u32) -> Result<(), FileError> {
     let file = file.as_ref().to_owned();
     tokio::task::spawn_blocking(move || change_mode_sync(&file, mode))
         .await
         .unwrap()
 }
 
-pub fn change_mode_sync(file: impl AsRef<Path>, mode: u32) -> Result<(), FileError> {
+fn change_mode_sync(file: impl AsRef<Path>, mode: u32) -> Result<(), FileError> {
     let file = file.as_ref();
     let mut permissions = get_metadata_sync(file)?.permissions();
 

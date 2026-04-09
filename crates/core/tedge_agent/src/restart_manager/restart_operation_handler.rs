@@ -4,6 +4,7 @@ pub mod restart_operation {
     use camino::Utf8Path;
     use std::fs::File;
     use std::io::Read;
+    use tedge_utils::file::PermissionEntry;
     use time::OffsetDateTime;
 
     const TEDGE_AGENT_RESTART: &str = "tedge_agent_restart";
@@ -19,7 +20,8 @@ pub mod restart_operation {
         let path = &tmp_dir.join(TEDGE_AGENT_RESTART);
         let date_utc = OffsetDateTime::now_utc().unix_timestamp().to_string();
 
-        tedge_utils::fs::atomically_write_file_async(path, date_utc.as_bytes()).await?;
+        tedge_utils::fs::write_file_async(path, date_utc.as_bytes(), &PermissionEntry::default())
+            .await?;
 
         Ok(())
     }

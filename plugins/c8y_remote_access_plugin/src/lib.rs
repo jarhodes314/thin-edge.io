@@ -12,8 +12,9 @@ use tedge_config::log_init;
 use tedge_config::tedge_toml::mapper_config::C8yMapperConfig;
 use tedge_config::TEdgeConfig;
 use tedge_utils::file::change_user_and_group;
-use tedge_utils::file::create_directory_with_user_group;
-use tedge_utils::file::create_file_with_user_group;
+use tedge_utils::file::ensure_dir_with_ownership;
+use tedge_utils::file::ensure_file;
+use tedge_utils::file::PermissionEntry;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
@@ -94,11 +95,9 @@ async fn declare_supported_operation(
     group: &str,
 ) -> miette::Result<()> {
     let supported_operation_path = supported_operation_path(config_dir);
-    create_directory_with_user_group(
+    ensure_dir_with_ownership(
         supported_operation_path.parent().unwrap(),
-        user,
-        group,
-        0o775,
+        &PermissionEntry::owned(user.to_string(), group.to_string(), 0o775),
     )
     .await
     .into_diagnostic()
@@ -110,11 +109,8 @@ async fn declare_supported_operation(
             .into_diagnostic()
             .context("Changing permissions of supported operations")
     } else {
-        create_file_with_user_group(
+        ensure_file(
             supported_operation_path,
-            user,
-            group,
-            0o644,
             Some(
                 r#"[exec]
 command = "c8y-remote-access-plugin"
@@ -122,6 +118,7 @@ topic = "c8y/s/ds"
 on_message = "530"
 "#,
             ),
+            &PermissionEntry::owned(user.to_string(), group.to_string(), 0o644),
         )
         .await
         .into_diagnostic()

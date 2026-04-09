@@ -35,7 +35,7 @@ use tedge_file_system_ext::FsWatchEvent;
 use tedge_utils::file::ensure_dir;
 use tedge_utils::file::move_file;
 use tedge_utils::file::PermissionEntry;
-use tedge_utils::fs::atomically_write_file_sync;
+use tedge_utils::fs::write_file_async;
 use toml::toml;
 
 #[cfg(test)]
@@ -105,7 +105,12 @@ impl LogManagerBuilder {
             path = agent_logs_path
         }
         .to_string();
-        atomically_write_file_sync(&config.plugin_config_path, example_config.as_bytes())?;
+        write_file_async(
+            &config.plugin_config_path,
+            example_config.as_bytes(),
+            &PermissionEntry::default(),
+        )
+        .await?;
 
         Ok(())
     }

@@ -25,7 +25,8 @@ use strum::IntoEnumIterator as _;
 use tedge_config_macros::MultiDto;
 use tedge_config_macros::ProfileName;
 use tedge_utils::file;
-use tedge_utils::fs::atomically_write_file_async;
+use tedge_utils::fs::write_file_async;
+use tedge_utils::fs::AtomFileError;
 use tracing::debug;
 use tracing::subscriber::NoSubscriber;
 use tracing::warn;
@@ -449,10 +450,12 @@ impl TEdgeConfigLocation {
 
         let permissions =
             file::PermissionEntry::owned(system_config.user, system_config.group, 0o644);
-        atomically_write_file_async(toml_path, toml.as_bytes()).await?;
-
-        if let Err(err) = permissions.apply(toml_path.as_std_path()).await {
-            warn!("failed to set file ownership/permissions for '{toml_path}': {err}");
+        match write_file_async(toml_path, toml.as_bytes(), &permissions).await {
+            Ok(()) => {}
+            Err(AtomFileError::PermissionsError(e)) => {
+                warn!("failed to set file ownership/permissions for '{toml_path}': {e}");
+            }
+            Err(e) => return Err(e.into()),
         }
 
         Ok(())

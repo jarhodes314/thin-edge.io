@@ -1,4 +1,5 @@
 use crate::file;
+use crate::file::PermissionEntry;
 use std::fs as std_fs;
 use std::io::Read;
 use std::io::Write;
@@ -6,6 +7,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use tokio::fs as tokio_fs;
+use tokio::io::AsyncRead;
 use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, thiserror::Error)]
@@ -18,7 +20,7 @@ pub enum AtomFileError {
     },
 
     #[error(transparent)]
-    FromFileError(#[from] file::FileError),
+    PermissionsError(#[from] file::FileError),
 }
 
 pub trait ErrContext<T> {
@@ -47,10 +49,7 @@ impl<T, E: Into<std::io::Error>> ErrContext<T> for Result<T, E> {
 ///
 /// Resulting destination file will have file mode 644. If a file already exists under the
 /// destination path, its ownership and mode will be overwritten.
-pub fn atomically_write_file_sync(
-    dest: impl AsRef<Path>,
-    mut reader: impl Read,
-) -> Result<(), AtomFileError> {
+pub fn write_file_sync(dest: impl AsRef<Path>, mut reader: impl Read) -> Result<(), AtomFileError> {
     let dest = dest.as_ref();
     // resolve path (including symlinks)
     // if the symlink doesn't exist, (attempt to) create the file it points to
@@ -111,11 +110,13 @@ pub fn atomically_write_file_sync(
 
 /// Write file to filesystem atomically using tokio::fs asynchronously.
 ///
-/// Resulting destination file will have file mode 644. If a file already exists under the
-/// destination path, its ownership and mode will be overwritten.
-pub async fn atomically_write_file_async(
+/// If a file already exists under the destination path, its content will be overwritten.
+/// Permissions are applied after writing; if `permissions` is `PermissionEntry::default()`
+/// the file mode is left at 0o644 (from the tempfile) and ownership is not changed.
+pub async fn write_file_async(
     dest: impl AsRef<Path>,
-    content: &[u8],
+    mut src: impl AsyncRead + Unpin,
+    permissions: &PermissionEntry,
 ) -> Result<(), AtomFileError> {
     let dest = dest.as_ref();
     // resolve path (including symlinks)
@@ -138,27 +139,35 @@ pub async fn atomically_write_file_async(
         })
         .with_context(|| "could not create the temporary file".to_string(), &dest)?;
 
-    file.as_file_mut().write_all(content).await.with_context(
-        || format!("could not write the content to the temporary file {file:?}",),
-        &dest,
-    )?;
+    tokio::io::copy(&mut src, file.as_file_mut())
+        .await
+        .with_context(
+            || format!("could not copy the content to the temporary file {file:?}"),
+            &dest,
+        )?;
 
-    // Ensure the content reach the disk
+    // Ensure the content reaches the disk
     file.as_file_mut().flush().await.with_context(
-        || format!("could not flush the content of the temporary file {file:?}",),
+        || format!("could not flush the content of the temporary file {file:?}"),
         &dest,
     )?;
 
     file.as_file().sync_all().await.with_context(
-        || format!("could not save the temporary file {file:?} to disk",),
+        || format!("could not save the temporary file {file:?} to disk"),
         &dest,
     )?;
+
+    // Capture permissions error without returning — persist must always run
+    let perms_result = permissions
+        .apply(file.path())
+        .await
+        .map_err(AtomFileError::PermissionsError);
 
     // Move the temp file to its destination
     file.persist(&dest)
         .with_context(|| "could not create destination file".to_string(), &dest)?;
 
-    // Ensure the new name reach the disk
+    // Ensure the new name reaches the disk
     let dir = tokio_fs::File::open(&dest_dir)
         .await
         .with_context(|| "could not open the directory".to_string(), &dest)?;
@@ -167,7 +176,7 @@ pub async fn atomically_write_file_async(
         .await
         .with_context(|| "could not save the file to disk".to_string(), &dest)?;
 
-    Ok(())
+    perms_result
 }
 
 fn parent_dir(file: &Path) -> PathBuf {
@@ -207,20 +216,31 @@ pub async fn persist_file_with_template(
 
     // Update the active config only if it hasn't been customized or disabled
     if !overridden && !disabled {
-        atomically_write_file_async(&config_path, content.as_bytes()).await?;
+        write_file_async(
+            &config_path,
+            content.as_bytes(),
+            &PermissionEntry::default(),
+        )
+        .await?;
     }
 
     // Always update the template file with the latest definition
-    atomically_write_file_async(&template_path, content.as_bytes()).await?;
+    write_file_async(
+        &template_path,
+        content.as_bytes(),
+        &PermissionEntry::default(),
+    )
+    .await?;
 
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::fs::atomically_write_file_async;
-    use crate::fs::atomically_write_file_sync;
+    use crate::file::PermissionEntry;
     use crate::fs::persist_file_with_template;
+    use crate::fs::write_file_async;
+    use crate::fs::write_file_sync;
     use crate::fs::AtomFileError;
 
     use tempfile::tempdir;
@@ -233,9 +253,13 @@ mod tests {
 
         let content = "test_data";
 
-        atomically_write_file_async(&destination_path, content.as_bytes())
-            .await
-            .unwrap();
+        write_file_async(
+            &destination_path,
+            content.as_bytes(),
+            &PermissionEntry::default(),
+        )
+        .await
+        .unwrap();
 
         std::fs::File::open(&temp_path).unwrap_err();
         if let Ok(destination_content) = std::fs::read(&destination_path) {
@@ -255,9 +279,13 @@ mod tests {
 
         let content = "test_data";
 
-        atomically_write_file_async(destination_path.clone(), content.as_bytes())
-            .await
-            .unwrap();
+        write_file_async(
+            destination_path.clone(),
+            content.as_bytes(),
+            &PermissionEntry::default(),
+        )
+        .await
+        .unwrap();
 
         if let Ok(destination_content) = std::fs::read(destination_path) {
             assert_eq!(destination_content, content.as_bytes());
@@ -275,9 +303,13 @@ mod tests {
 
         let content = "test_data";
 
-        atomically_write_file_async(destination_path.clone(), content.as_bytes())
-            .await
-            .unwrap();
+        write_file_async(
+            destination_path.clone(),
+            content.as_bytes(),
+            &PermissionEntry::default(),
+        )
+        .await
+        .unwrap();
 
         if let Ok(destination_content) = std::fs::read(destination_path) {
             assert_eq!(destination_content, content.as_bytes());
@@ -293,7 +325,7 @@ mod tests {
 
         let content = "test_data";
 
-        let () = atomically_write_file_sync(&destination_path, content.as_bytes()).unwrap();
+        let () = write_file_sync(&destination_path, content.as_bytes()).unwrap();
 
         if let Ok(destination_content) = std::fs::read(&destination_path) {
             assert_eq!(destination_content, content.as_bytes());
@@ -312,7 +344,7 @@ mod tests {
 
         let content = "test_data";
 
-        let () = atomically_write_file_sync(link_path.clone(), content.as_bytes()).unwrap();
+        let () = write_file_sync(link_path.clone(), content.as_bytes()).unwrap();
 
         if let Ok(destination_content) = std::fs::read(destination_path) {
             assert_eq!(destination_content, content.as_bytes());
@@ -330,7 +362,7 @@ mod tests {
 
         let content = "test_data";
 
-        let () = atomically_write_file_sync(link_path.clone(), content.as_bytes()).unwrap();
+        let () = write_file_sync(link_path.clone(), content.as_bytes()).unwrap();
 
         if let Ok(destination_content) = std::fs::read(destination_path) {
             assert_eq!(destination_content, content.as_bytes());

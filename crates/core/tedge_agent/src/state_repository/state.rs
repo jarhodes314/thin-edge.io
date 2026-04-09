@@ -5,7 +5,8 @@ use log::warn;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::marker::PhantomData;
-use tedge_utils::fs::atomically_write_file_async;
+use tedge_utils::file::PermissionEntry;
+use tedge_utils::fs::write_file_async;
 use tokio::fs;
 
 /// Store the current state of an operation
@@ -81,13 +82,23 @@ impl<T: DeserializeOwned + Serialize> AgentStateRepository<T> {
     /// Store the current operation, persisting is JSON representation
     pub async fn store(&self, state: &T) -> Result<(), StateError> {
         let json = serde_json::to_string(state)?;
-        atomically_write_file_async(&self.state_repo_path, json.as_bytes()).await?;
+        write_file_async(
+            &self.state_repo_path,
+            json.as_bytes(),
+            &PermissionEntry::default(),
+        )
+        .await?;
         Ok(())
     }
 
     /// Clear the current operation by clearing the persisted file
     pub async fn clear(&self) -> Result<(), StateError> {
-        atomically_write_file_async(&self.state_repo_path, "".as_bytes()).await?;
+        write_file_async(
+            &self.state_repo_path,
+            "".as_bytes(),
+            &PermissionEntry::default(),
+        )
+        .await?;
         Ok(())
     }
 }

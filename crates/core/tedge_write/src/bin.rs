@@ -106,12 +106,8 @@ pub fn run(args: Args) -> anyhow::Result<()> {
 
     let src = std::io::stdin().lock();
 
-    tedge_utils::atomic::write_file_atomic_set_permissions_if_doesnt_exist(
-        src,
-        &target_path,
-        &file_permissions,
-    )
-    .with_context(|| format!("failed to write to destination file '{target_path}'"))?;
+    tedge_utils::atomic::write_file_preserving_permissions(src, &target_path, &file_permissions)
+        .with_context(|| format!("failed to write to destination file '{target_path}'"))?;
 
     Ok(())
 }

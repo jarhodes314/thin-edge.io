@@ -30,7 +30,7 @@ use anyhow::Context;
 ///
 /// If the file already exists, its content will be overwritten but its permissions will remain
 /// unchanged.
-pub fn write_file_atomic_set_permissions_if_doesnt_exist(
+pub fn write_file_preserving_permissions(
     mut src: impl Read,
     dest: impl AsRef<Path>,
     permissions: &MaybePermissions,

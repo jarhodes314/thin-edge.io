@@ -49,8 +49,8 @@ use tedge_mqtt_ext::TopicFilter;
 use tedge_utils::file::ensure_dir;
 use tedge_utils::file::move_file;
 use tedge_utils::file::PermissionEntry;
-use tedge_utils::fs::atomically_write_file_sync;
 use tedge_utils::fs::persist_file_with_template;
+use tedge_utils::fs::write_file_async;
 use toml::toml;
 
 /// An instance of the config manager
@@ -152,7 +152,12 @@ impl ConfigManagerBuilder {
             mode = 0o644
         }
         .to_string();
-        atomically_write_file_sync(&config.plugin_config_path, example_config.as_bytes())?;
+        write_file_async(
+            &config.plugin_config_path,
+            example_config.as_bytes(),
+            &PermissionEntry::default(),
+        )
+        .await?;
 
         Ok(())
     }

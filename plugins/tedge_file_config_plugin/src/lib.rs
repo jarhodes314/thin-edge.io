@@ -244,12 +244,10 @@ impl FileConfigPlugin {
         let src = std::fs::File::open(from)
             .with_context(|| format!("failed to open source temporary file '{from}'"))?;
 
-        let Err(err) = tedge_utils::atomic::write_file_atomic_set_permissions_if_doesnt_exist(
-            src,
-            &to,
-            &permissions,
-        )
-        .with_context(|| format!("failed to deploy config file from '{from}' to '{to}'")) else {
+        let Err(err) =
+            tedge_utils::atomic::write_file_preserving_permissions(src, &to, &permissions)
+                .with_context(|| format!("failed to deploy config file from '{from}' to '{to}'"))
+        else {
             return Ok(to);
         };
 
