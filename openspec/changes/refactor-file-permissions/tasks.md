@@ -45,3 +45,30 @@
 - [x] Add unit test asserting all expected subdirectory names are present in `required_paths`
 - [x] Add unit test asserting file entries (e.g. `system.toml`) have `mode = 0o644`
 - [x] Add mock-based unit test verifying `initialize_tedge` calls `ensure_path` for each `PathDef`
+
+## Scope expansion (session 2)
+
+### Atomic write API cleanup
+
+- [x] Rename `atomically_write_file_sync` → `write_file_sync` in `fs.rs`
+- [x] Rename `atomically_write_file_async` → `write_file_async` in `fs.rs`
+- [x] Rename `write_file_atomic_set_permissions_if_doesnt_exist` → `write_file_preserving_permissions` in `atomic.rs`
+- [x] Update all call sites to use new names
+
+### Visibility cleanup
+
+- [x] Make `change_mode` private (only used internally by `apply()`)
+- [x] Make `change_mode_sync` private (only used internally by `apply_sync()`)
+- [x] Make `change_user_and_group_sync` private (only used internally)
+
+### Fix async misuse
+
+- [x] Replace `write_file_sync` with `write_file_async` in `tedge_config_manager` (was blocking an async thread)
+- [x] Replace `write_file_sync` with `write_file_async` in `tedge_log_manager` (was blocking an async thread)
+
+### Extend `write_file_async`
+
+- [x] Change `write_file_async` content parameter from `&[u8]` to `impl AsyncRead + Unpin`
+- [x] Add `permissions: &PermissionEntry` parameter to `write_file_async`
+- [x] Update all `write_file_async` call sites to pass `&PermissionEntry`
+- [x] Remove now-redundant `permissions.apply()` calls that follow `write_file_async` (e.g. in `tedge_config_location.rs`)
