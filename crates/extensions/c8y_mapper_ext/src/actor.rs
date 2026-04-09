@@ -41,8 +41,9 @@ use tedge_mqtt_ext::MqttMessage;
 use tedge_mqtt_ext::TopicFilter;
 use tedge_uploader_ext::UploadRequest;
 use tedge_uploader_ext::UploadResult;
-use tedge_utils::file::create_directory_with_defaults;
+use tedge_utils::file::ensure_dir;
 use tedge_utils::file::FileError;
+use tedge_utils::file::PermissionEntry;
 
 pub(crate) type CmdId = String;
 pub(crate) type IdUploadRequest = (CmdId, UploadRequest);
@@ -406,9 +407,10 @@ impl C8yMapperBuilder {
 
     pub async fn init(config: &C8yMapperConfig) -> Result<(), FileError> {
         // Create c8y operations directory
-        create_directory_with_defaults(config.ops_dir.as_std_path()).await?;
+        let perms = PermissionEntry::default();
+        ensure_dir(config.ops_dir.as_std_path(), &perms).await?;
         // Create directory for persistent entity store
-        create_directory_with_defaults(config.state_dir.as_std_path()).await?;
+        ensure_dir(config.state_dir.as_std_path(), &perms).await?;
         Ok(())
     }
 }

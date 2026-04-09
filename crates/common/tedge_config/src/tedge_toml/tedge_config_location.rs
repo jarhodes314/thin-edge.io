@@ -438,13 +438,17 @@ impl TEdgeConfigLocation {
                 .await
                 .with_context(|| format!("Failed to create directory {parent_dir}"))?;
         }
-        let directory_permissions =
-            file::permissions(&system_config.user, &system_config.group, 0o755);
+        let directory_permissions = file::PermissionEntry::owned(
+            system_config.user.clone(),
+            system_config.group.clone(),
+            0o755,
+        );
         if let Err(err) = directory_permissions.apply(parent_dir.as_std_path()).await {
             warn!("failed to set file ownership for '{parent_dir}': {err}");
         }
 
-        let permissions = file::permissions(&system_config.user, &system_config.group, 0o644);
+        let permissions =
+            file::PermissionEntry::owned(system_config.user, system_config.group, 0o644);
         atomically_write_file_async(toml_path, toml.as_bytes()).await?;
 
         if let Err(err) = permissions.apply(toml_path.as_std_path()).await {

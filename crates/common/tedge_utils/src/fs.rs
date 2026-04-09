@@ -203,7 +203,7 @@ pub async fn persist_file_with_template(
     let overridden = prior_config != prior_template;
     let disabled = tokio_fs::try_exists(&disabled_path).await.unwrap_or(false);
 
-    file::create_directory_with_defaults(dir).await?;
+    file::ensure_dir(dir, &file::PermissionEntry::default()).await?;
 
     // Update the active config only if it hasn't been customized or disabled
     if !overridden && !disabled {

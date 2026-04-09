@@ -20,8 +20,8 @@ use tedge_mqtt_bridge::rumqttc::Transport;
 use tedge_mqtt_bridge::AuthMethod;
 use tedge_mqtt_bridge::BridgeConfig;
 use tedge_mqtt_bridge::MqttBridgeActorBuilder;
-use tedge_utils::file;
-use tedge_utils::file::create_directory_and_update_ownership;
+use tedge_utils::file::ensure_dir_with_ownership;
+use tedge_utils::file::PermissionEntry;
 use tedge_watch_ext::WatchActorBuilder;
 use tracing::warn;
 use yansi::Paint;
@@ -166,11 +166,9 @@ async fn bridge_rules(
     let mapper_config_dir = tedge_config.mapper_config_dir::<AzMapperSpecificConfig>(cloud_profile);
     let system_config = tedge_config.read_system_config();
     let (user, group) = (system_config.user, system_config.group);
-    let permissions = file::permissions(&user, &group, 0o755);
+    let permissions = PermissionEntry::owned(user.clone(), group.clone(), 0o755);
 
-    if let Err(err) =
-        create_directory_and_update_ownership(mapper_config_dir.clone(), &permissions).await
-    {
+    if let Err(err) = ensure_dir_with_ownership(mapper_config_dir.clone(), &permissions).await {
         warn!("failed to set file ownership for '{mapper_config_dir}': {err}");
     }
 

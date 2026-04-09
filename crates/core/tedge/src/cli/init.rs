@@ -10,7 +10,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use tedge_config::TEdgeConfig;
 use tedge_utils::file;
-use tedge_utils::file::create_directory_and_update_ownership;
+use tedge_utils::file::ensure_dir_with_ownership;
+use tedge_utils::file::PermissionEntry;
 use tracing::debug;
 use tracing::info;
 
@@ -30,8 +31,59 @@ impl TEdgeInitCmd {
     }
 }
 
+/// A path that `tedge init` is responsible for creating.
+pub struct PathDef {
+    pub path: PathBuf,
+    pub kind: PathKind,
+    pub permissions: PermissionEntry,
+    /// If true, ownership/mode are also reasserted when the path already exists.
+    pub update_existing: bool,
+}
+
+pub enum PathKind {
+    Dir,
+}
+
+impl PathDef {
+    fn dir(path: impl Into<PathBuf>, permissions: PermissionEntry) -> Self {
+        Self {
+            path: path.into(),
+            kind: PathKind::Dir,
+            permissions,
+            update_existing: true,
+        }
+    }
+}
+
+/// The complete set of directories that `tedge init` is responsible for creating.
+///
+/// This is a pure function of the config and user/group — it does not touch the
+/// filesystem.
+pub fn required_paths(config: &TEdgeConfig, user: &str, group: &str) -> Vec<PathDef> {
+    let config_dir = config.root_dir();
+    let dir_perms = PermissionEntry::owned(user.to_string(), group.to_string(), 0o775);
+
+    vec![
+        PathDef::dir(&*config_dir, dir_perms.clone()),
+        PathDef::dir(config_dir.join("mosquitto-conf"), dir_perms.clone()),
+        PathDef::dir(config_dir.join("operations"), dir_perms.clone()),
+        PathDef::dir(config_dir.join("operations").join("c8y"), dir_perms.clone()),
+        PathDef::dir(config_dir.join("plugins"), dir_perms.clone()),
+        PathDef::dir(config_dir.join("sm-plugins"), dir_perms.clone()),
+        PathDef::dir(config_dir.join("device-certs"), dir_perms.clone()),
+        PathDef::dir(config_dir.join("mappers"), dir_perms.clone()),
+        PathDef::dir(config_dir.join(".tedge-mapper-c8y"), dir_perms.clone()),
+        PathDef::dir(&*config.logs.path, dir_perms.clone()),
+        PathDef::dir(&*config.data.path, dir_perms),
+    ]
+}
+
 impl TEdgeInitCmd {
-    async fn initialize_tedge(&self, config: TEdgeConfig) -> anyhow::Result<()> {
+    async fn initialize_tedge(
+        &self,
+        config: TEdgeConfig,
+        fs: &(impl FileSystem + std::marker::Sync),
+    ) -> anyhow::Result<()> {
         let system_config = config.read_system_config();
 
         let user = Self::resolve_config_value("User", self.user.clone(), system_config.user);
@@ -77,33 +129,15 @@ impl TEdgeInitCmd {
         };
 
         for component in &component_subcommands {
-            create_symlinks_for(component, target, executable_dir, &RealEnv).await?;
+            create_symlinks_for(component, target, executable_dir, fs).await?;
         }
 
-        let config_dir = &config.root_dir();
-        let permissions = file::permissions(&user, &group, 0o775);
-        create_directory_and_update_ownership(&config_dir, &permissions).await?;
-        create_directory_and_update_ownership(config_dir.join("mosquitto-conf"), &permissions)
-            .await?;
-        create_directory_and_update_ownership(config_dir.join("operations"), &permissions).await?;
-        create_directory_and_update_ownership(
-            config_dir.join("operations").join("c8y"),
-            &permissions,
-        )
-        .await?;
-        create_directory_and_update_ownership(config_dir.join("plugins"), &permissions).await?;
-        create_directory_and_update_ownership(config_dir.join("sm-plugins"), &permissions).await?;
-        create_directory_and_update_ownership(config_dir.join("device-certs"), &permissions)
-            .await?;
-        create_directory_and_update_ownership(config_dir.join("mappers"), &permissions).await?;
-        create_directory_and_update_ownership(config_dir.join(".tedge-mapper-c8y"), &permissions)
-            .await?;
+        for path_def in required_paths(&config, &user, &group) {
+            fs.ensure_path(&path_def).await?;
+        }
 
-        create_directory_and_update_ownership(&config.logs.path, &permissions).await?;
-        create_directory_and_update_ownership(&config.data.path, &permissions).await?;
-
-        let file_permissions = file::permissions(&user, &group, 0o644);
-        let system_toml = config_dir.join("system.toml");
+        let file_permissions = PermissionEntry::owned(user.clone(), group.clone(), 0o644);
+        let system_toml = config.root_dir().join("system.toml");
         if system_toml.exists() {
             file_permissions
                 .clone()
@@ -114,8 +148,12 @@ impl TEdgeInitCmd {
         let agent_state_dir = if config.agent.state.path.exists() {
             config.agent.state.path.to_path_buf()
         } else {
-            let agent_state_dir = config_dir.join(".agent");
-            create_directory_and_update_ownership(&agent_state_dir, &permissions).await?;
+            let agent_state_dir = config.root_dir().join(".agent");
+            ensure_dir_with_ownership(
+                &agent_state_dir,
+                &PermissionEntry::owned(user, group, 0o775),
+            )
+            .await?;
             agent_state_dir
         };
 
@@ -157,7 +195,7 @@ impl Command for TEdgeInitCmd {
     }
 
     async fn execute(&self, config: TEdgeConfig) -> Result<(), MaybeFancy<anyhow::Error>> {
-        self.initialize_tedge(config)
+        self.initialize_tedge(config, &RealEnv)
             .await
             .with_context(|| "Failed to initialize tedge. You have to run tedge with sudo.")
             .map_err(<_>::into)
@@ -208,6 +246,15 @@ trait FileSystem {
             String::from_utf8_lossy(&res.stderr),
         );
         Ok(())
+    }
+
+    async fn ensure_path(&self, path_def: &PathDef) -> Result<(), file::FileError> {
+        match path_def.kind {
+            PathKind::Dir if path_def.update_existing => {
+                ensure_dir_with_ownership(&path_def.path, &path_def.permissions).await
+            }
+            PathKind::Dir => file::ensure_dir(&path_def.path, &path_def.permissions).await,
+        }
     }
 }
 
@@ -263,6 +310,8 @@ impl FileSystem for RealEnv {}
 mod tests {
     use super::*;
     use mockall::predicate::*;
+    use tedge_config::TEdgeConfig;
+    use tedge_test_utils::fs::TempTedgeDir;
 
     mod create_symlinks_for {
         use super::*;
@@ -372,6 +421,63 @@ mod tests {
             create_symlinks_for("tedge-mapper", target, Path::new("/usr/bin"), &fs)
                 .await
                 .unwrap()
+        }
+    }
+
+    mod required_paths {
+        use super::*;
+
+        fn test_config() -> (TempTedgeDir, TEdgeConfig) {
+            let ttd = TempTedgeDir::new();
+            let config = TEdgeConfig::load_toml_str_with_root_dir(ttd.path(), "");
+            (ttd, config)
+        }
+
+        #[test]
+        fn config_dir_has_0o775_and_update_existing() {
+            let (_ttd, config) = test_config();
+            let paths = required_paths(&config, "tedge", "tedge");
+            let config_dir = config.root_dir().to_path_buf();
+            let entry = paths.iter().find(|p| p.path == config_dir).unwrap();
+            assert_eq!(entry.permissions.mode, Some(0o775));
+            assert!(entry.update_existing);
+        }
+
+        #[test]
+        fn includes_all_expected_subdirectories() {
+            let (_ttd, config) = test_config();
+            let paths = required_paths(&config, "tedge", "tedge");
+            let config_dir = config.root_dir().to_path_buf();
+            let subdirs = [
+                "mosquitto-conf",
+                "operations",
+                "operations/c8y",
+                "plugins",
+                "sm-plugins",
+                "device-certs",
+                "mappers",
+                ".tedge-mapper-c8y",
+            ];
+            for subdir in subdirs {
+                let expected = config_dir.join(subdir);
+                assert!(
+                    paths.iter().any(|p| p.path == expected),
+                    "missing expected path: {subdir}"
+                );
+            }
+        }
+
+        #[test]
+        fn includes_log_and_data_dirs() {
+            let (_ttd, config) = test_config();
+            let paths = required_paths(&config, "tedge", "tedge");
+            let log_path = config.logs.path.to_path_buf();
+            let data_path = config.data.path.to_path_buf();
+            assert!(paths.iter().any(|p| p.path == log_path), "missing log dir");
+            assert!(
+                paths.iter().any(|p| p.path == data_path),
+                "missing data dir"
+            );
         }
     }
 

@@ -46,7 +46,7 @@ use tedge_api::Jsonify;
 use tedge_file_system_ext::FsWatchEvent;
 use tedge_mqtt_ext::MqttMessage;
 use tedge_mqtt_ext::TopicFilter;
-use tedge_utils::file::create_directory_with_defaults;
+use tedge_utils::file::ensure_dir;
 use tedge_utils::file::move_file;
 use tedge_utils::file::PermissionEntry;
 use tedge_utils::fs::atomically_write_file_sync;
@@ -117,7 +117,7 @@ impl ConfigManagerBuilder {
         }
 
         // creating plugin config parent dir
-        create_directory_with_defaults(&config.plugin_config_dir).await?;
+        ensure_dir(&config.plugin_config_dir, &PermissionEntry::default()).await?;
 
         let legacy_plugin_config = config
             .config_dir

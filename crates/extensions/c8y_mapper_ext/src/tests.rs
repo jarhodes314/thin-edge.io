@@ -66,7 +66,8 @@ use tedge_mqtt_ext::Topic;
 use tedge_mqtt_ext::TopicFilter;
 use tedge_test_utils::fs::with_exec_permission;
 use tedge_test_utils::fs::TempTedgeDir;
-use tedge_utils::file::create_directory_with_defaults;
+use tedge_utils::file::ensure_dir;
+use tedge_utils::file::PermissionEntry;
 
 const TEST_TIMEOUT_MS: Duration = Duration::from_millis(3000);
 
@@ -3212,7 +3213,7 @@ pub(crate) async fn c8y_mapper_builder(
 
     let mapper_dir = tmp_dir.utf8_path().join("mappers").join("c8y");
     let flows_dir = tedge_flows::flows_dir(&mapper_dir);
-    create_directory_with_defaults(flows_dir.clone())
+    ensure_dir(flows_dir.clone(), &PermissionEntry::default())
         .await
         .unwrap();
     let mapper_config = HashMap::new();

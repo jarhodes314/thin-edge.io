@@ -62,7 +62,8 @@ use tedge_mqtt_ext::MqttConfig;
 use tedge_script_ext::ScriptActor;
 use tedge_signal_ext::SignalActor;
 use tedge_uploader_ext::UploaderActor;
-use tedge_utils::file::create_directory_with_defaults;
+use tedge_utils::file::ensure_dir;
+use tedge_utils::file::PermissionEntry;
 use tracing::info;
 use tracing::instrument;
 
@@ -260,15 +261,19 @@ impl Agent {
     #[instrument(skip(self), name = "sm-agent")]
     pub async fn init(&self) -> Result<(), anyhow::Error> {
         // `config_dir` by default is `/etc/tedge` (or whatever the user sets with --config-dir)
-        create_directory_with_defaults(agent_default_state_dir(self.config.config_dir.clone()))
-            .await?;
+        let perms = PermissionEntry::default();
+        ensure_dir(
+            agent_default_state_dir(self.config.config_dir.clone()),
+            &perms,
+        )
+        .await?;
         // Create directory for device inventory.json
-        create_directory_with_defaults(self.config.config_dir.join("device")).await?;
-        create_directory_with_defaults(&self.config.agent_log_dir).await?;
-        create_directory_with_defaults(&self.config.data_dir).await?;
-        create_directory_with_defaults(&self.config.http_config.file_transfer_dir).await?;
-        create_directory_with_defaults(self.config.data_dir.cache_dir()).await?;
-        create_directory_with_defaults(self.config.operations_dir.clone()).await?;
+        ensure_dir(self.config.config_dir.join("device"), &perms).await?;
+        ensure_dir(&self.config.agent_log_dir, &perms).await?;
+        ensure_dir(&self.config.data_dir, &perms).await?;
+        ensure_dir(&self.config.http_config.file_transfer_dir, &perms).await?;
+        ensure_dir(self.config.data_dir.cache_dir(), &perms).await?;
+        ensure_dir(self.config.operations_dir.clone(), &perms).await?;
 
         Ok(())
     }

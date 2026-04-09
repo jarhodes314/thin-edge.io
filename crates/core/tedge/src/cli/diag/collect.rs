@@ -39,7 +39,7 @@ impl Command for DiagCollectCommand {
     }
 
     async fn execute(&self, _: TEdgeConfig) -> Result<(), MaybeFancy<anyhow::Error>> {
-        file::create_directory_with_defaults(&self.diag_dir)
+        file::ensure_dir(&self.diag_dir, &file::PermissionEntry::default())
             .await
             .with_context(|| format!("failed to create directory at {}", self.diag_dir))?;
         let mut logger = DualLogger::new(self.diag_dir.join("summary.log"))
@@ -161,7 +161,7 @@ impl DiagCollectCommand {
             .with_context(|| format!("No file name for {plugin_path}"))?;
         let plugin_output_dir = self.diag_dir.join(plugin_name);
         let output_file = plugin_output_dir.join("output.log");
-        file::create_directory_with_defaults(&plugin_output_dir)
+        file::ensure_dir(&plugin_output_dir, &file::PermissionEntry::default())
             .await
             .with_context(|| format!("Failed to create output directory at {plugin_output_dir}"))?;
 
