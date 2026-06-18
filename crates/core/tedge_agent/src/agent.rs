@@ -475,6 +475,7 @@ impl Agent {
                 mqtt_schema,
                 self.config.fts_url.clone(),
                 self.config.data_dir.clone(),
+                device_topic_id.clone(),
                 &mut downloader_actor_builder,
                 &mut mqtt_actor_builder,
             );

@@ -64,6 +64,7 @@ pub struct FileCacheActor {
     tedge_http_host: Arc<str>,
     mqtt_schema: MqttSchema,
     data_dir: DataDir,
+    device_topic_id: EntityTopicId,
 
     pending_operations: HashMap<String, ConfigUpdateCmdPayload>,
 }
@@ -113,7 +114,13 @@ impl FileCacheActor {
                 }
             };
 
-        if update_payload.remote_url.is_empty() || update_payload.tedge_url.is_some() {
+        // Caching is a best-effort optimization to pre-seed the File Transfer Service for child
+        // devices. For the local device the agent downloads directly from `remoteUrl`, so caching
+        // is pointless and a failed cache download would spuriously fail the operation.
+        if update_payload.remote_url.is_empty()
+            || update_payload.tedge_url.is_some()
+            || entity == self.device_topic_id
+        {
             return Ok(());
         }
 
@@ -285,6 +292,7 @@ pub struct FileCacheActorBuilder {
     mqtt_schema: MqttSchema,
     tedge_http_host: Arc<str>,
     data_dir: DataDir,
+    device_topic_id: EntityTopicId,
 }
 
 impl FileCacheActorBuilder {
@@ -292,6 +300,7 @@ impl FileCacheActorBuilder {
         mqtt_schema: MqttSchema,
         tedge_http_host: Arc<str>,
         data_dir: DataDir,
+        device_topic_id: EntityTopicId,
         downloader_actor: &mut impl Service<IdDownloadRequest, IdDownloadResult>,
         mqtt_actor: &mut (impl MessageSource<MqttMessage, TopicFilter> + MessageSink<MqttMessage>),
     ) -> Self {
@@ -310,6 +319,7 @@ impl FileCacheActorBuilder {
             mqtt_schema,
             tedge_http_host,
             data_dir,
+            device_topic_id,
         }
     }
 
@@ -350,8 +360,91 @@ impl Builder<FileCacheActor> for FileCacheActorBuilder {
             tedge_http_host: self.tedge_http_host,
             mqtt_schema: self.mqtt_schema,
             data_dir: self.data_dir,
+            device_topic_id: self.device_topic_id,
 
             pending_operations: HashMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+    use tedge_actors::test_helpers::FakeServerBox;
+    use tedge_actors::test_helpers::FakeServerBoxBuilder;
+    use tedge_actors::test_helpers::MessageReceiverExt;
+    use tedge_actors::test_helpers::TimedMessageBox;
+    use tedge_actors::Builder;
+    use tedge_actors::MessageReceiver;
+    use tedge_actors::Sender;
+    use tedge_actors::SimpleMessageBox;
+    use tedge_test_utils::fs::TempTedgeDir;
+    use tedge_utils::paths::TedgePaths;
+
+    const TEST_TIMEOUT: Duration = Duration::from_millis(500);
+
+    type MqttMessageBox = TimedMessageBox<SimpleMessageBox<MqttMessage, MqttMessage>>;
+    type DownloaderMessageBox = TimedMessageBox<FakeServerBox<IdDownloadRequest, IdDownloadResult>>;
+
+    #[tokio::test]
+    async fn does_not_pre_cache_config_files_for_the_local_device() {
+        let ttd = TempTedgeDir::new();
+        let (mut mqtt, mut downloader) = spawn_file_cache_actor(&ttd);
+
+        // A config_update targeting the device the agent itself serves
+        let topic = Topic::new_unchecked("te/device/main///cmd/config_update/c8y-1234");
+        mqtt.send(executing_config_update(&topic)).await.unwrap();
+
+        // The cache download is pointless for the local device, so none is requested
+        assert_eq!(downloader.recv().await, None);
+        // and the operation is not marked as failed
+        assert_eq!(mqtt.recv().await, None);
+    }
+
+    #[tokio::test]
+    async fn pre_caches_config_files_for_child_devices() {
+        let ttd = TempTedgeDir::new();
+        let (mut mqtt, mut downloader) = spawn_file_cache_actor(&ttd);
+
+        // A config_update targeting a child device
+        let topic = Topic::new_unchecked("te/device/child01///cmd/config_update/c8y-1234");
+        mqtt.send(executing_config_update(&topic)).await.unwrap();
+
+        // The file is downloaded once into the cache for the child device to fetch locally
+        let (download_topic, request) = downloader.recv().await.unwrap();
+        assert_eq!(download_topic, topic.name);
+        assert_eq!(request.url, "http://test.example/file");
+    }
+
+    fn executing_config_update(topic: &Topic) -> MqttMessage {
+        let payload = r#"{"status":"executing","remoteUrl":"http://test.example/file","serverUrl":"http://test.example","type":"mytype"}"#;
+        MqttMessage::new(topic, payload)
+    }
+
+    fn spawn_file_cache_actor(ttd: &TempTedgeDir) -> (MqttMessageBox, DownloaderMessageBox) {
+        let mut mqtt_builder: SimpleMessageBoxBuilder<MqttMessage, MqttMessage> =
+            SimpleMessageBoxBuilder::new("MQTT", 10);
+        let mut downloader_builder: FakeServerBoxBuilder<IdDownloadRequest, IdDownloadResult> =
+            FakeServerBoxBuilder::default();
+
+        let data_dir = DataDir::from(TedgePaths::from_root_with_defaults(ttd.utf8_path(), "", ""));
+
+        let actor_builder = FileCacheActorBuilder::new(
+            MqttSchema::default(),
+            "127.0.0.1:8000".into(),
+            data_dir,
+            EntityTopicId::default_main_device(),
+            &mut downloader_builder,
+            &mut mqtt_builder,
+        );
+
+        let actor = actor_builder.build();
+        tokio::spawn(async move { actor.run().await });
+
+        (
+            mqtt_builder.build().with_timeout(TEST_TIMEOUT),
+            downloader_builder.build().with_timeout(TEST_TIMEOUT),
+        )
     }
 }
