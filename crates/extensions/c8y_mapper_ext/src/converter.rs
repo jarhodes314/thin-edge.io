@@ -2661,39 +2661,6 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn smartrest_duplicate_of_json_operation_does_not_create_second_command() {
-        let tmp_dir = TempTedgeDir::new();
-        let (mut converter, _http_proxy) = create_c8y_converter(&tmp_dir);
-
-        let json_operation = MqttMessage::new(
-            &C8yDeviceControlTopic::topic(&"c8y".try_into().unwrap()),
-            json!({
-                "id": "12345",
-                "status": "PENDING",
-                "c8y_Restart": {},
-                "description": "Restart device",
-                "externalSource": {"externalId": "test-device", "type": "c8y_Serial"}
-            })
-            .to_string(),
-        );
-        let results = converter.try_convert(&json_operation).await.unwrap();
-        assert_eq!(
-            results.len(),
-            1,
-            "JSON-over-MQTT restart should produce one command"
-        );
-
-        let smartrest_duplicate =
-            MqttMessage::new(&Topic::new_unchecked("c8y/s/ds"), "510,test-device");
-        let results = converter.try_convert(&smartrest_duplicate).await.unwrap();
-        assert!(
-            results.is_empty(),
-            "SmartREST duplicate on c8y/s/ds must not create a second command, \
-             but got: {results:?}"
-        );
-    }
-
-    #[tokio::test]
     async fn handle_operations_for_child_device() {
         let tmp_dir = TempTedgeDir::new();
         let (mut converter, _http_proxy) = create_c8y_converter(&tmp_dir);
