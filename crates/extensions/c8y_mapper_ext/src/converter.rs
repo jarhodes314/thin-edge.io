@@ -1258,9 +1258,8 @@ impl CumulocityConverter {
                 Ok(vec![])
             }
             _ => {
-                error!(
-                    "Received message on subscribed topic '{}' but no handler matched. \
-                     If this topic was added via c8y.topics, ensure a matching custom operation is configured.",
+                warn!(
+                    "Received message on subscribed topic '{}' but no handler matched.",
                     message.topic.name
                 );
                 Ok(vec![])
