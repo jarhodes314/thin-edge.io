@@ -6,6 +6,7 @@ use tedge_config_engine::AppendRemoveItem;
 /// Authentication method for the cloud broker connection.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, facet::Facet)]
 #[repr(u8)]
+#[facet(rename_all = "lowercase")]
 pub enum AuthMethod {
     #[default]
     Auto,

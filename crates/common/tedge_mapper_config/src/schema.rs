@@ -15,6 +15,7 @@ pub mod mapper {
     use tedge_config_engine::*;
 
     use crate::auth_method::AuthMethod;
+    use crate::seconds::SecondsOrHumanTime;
 
     tedge_config_engine_macro::define_config! {
         Mapper {
@@ -44,7 +45,7 @@ pub mod mapper {
                 clean_session: bool,
 
                 /// MQTT keepalive interval
-                keepalive_interval: String,
+                keepalive_interval: SecondsOrHumanTime,
 
                 /// TLS transport control
                 #[tedge_config(default(value = "auto"))]
