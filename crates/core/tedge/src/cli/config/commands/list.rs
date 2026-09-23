@@ -56,6 +56,9 @@ fn print_config_list(
                 if !entry.key.starts_with("mappers.") {
                     continue;
                 }
+                if is_builtin_cloud_mapper_key(&entry.key) {
+                    continue;
+                }
                 if !key_matches_filter(&entry.key, filter) {
                     continue;
                 }
@@ -127,6 +130,9 @@ fn print_config_doc(config: &TEdgeConfig, filter: Option<&str>) {
         Ok(fed) => {
             for entry in fed.all_entries() {
                 if !entry.key.starts_with("mappers.") {
+                    continue;
+                }
+                if is_builtin_cloud_mapper_key(&entry.key) {
                     continue;
                 }
                 if !key_matches_filter(&entry.key, filter) {
@@ -202,6 +208,21 @@ fn print_doc_entries(entries: &[DocEntry]) {
     }
 }
 
+/// Built-in cloud mappers (c8y, az, aws) already appear under their own
+/// top-level namespace (e.g. `c8y.url`), so we hide them from the
+/// `mappers.*` listing to avoid showing every key twice.
+#[cfg(feature = "mapper-config")]
+fn is_builtin_cloud_mapper_key(key: &str) -> bool {
+    const BUILTIN_CLOUDS: &[&str] = &["c8y", "az", "aws"];
+    let Some(after) = key.strip_prefix("mappers.") else {
+        return false;
+    };
+    BUILTIN_CLOUDS.iter().any(|cloud| {
+        after == *cloud
+            || after.starts_with(&format!("{cloud}."))
+    })
+}
+
 fn key_matches_filter(key: &str, filter: Option<&str>) -> bool {
     match filter {
         Some(filter) => key.contains(filter),
@@ -212,6 +233,35 @@ fn key_matches_filter(key: &str, filter: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "mapper-config")]
+    mod builtin_cloud_filter {
+        use super::super::is_builtin_cloud_mapper_key;
+
+        #[test]
+        fn hides_builtin_clouds() {
+            assert!(is_builtin_cloud_mapper_key("mappers.c8y.url"));
+            assert!(is_builtin_cloud_mapper_key("mappers.az.bridge.clean_session"));
+            assert!(is_builtin_cloud_mapper_key("mappers.aws.url"));
+        }
+
+        #[test]
+        fn hides_builtin_cloud_profiles() {
+            assert!(is_builtin_cloud_mapper_key("mappers.c8y.prod.url"));
+        }
+
+        #[test]
+        fn shows_custom_mappers() {
+            assert!(!is_builtin_cloud_mapper_key("mappers.thingsboard.url"));
+            assert!(!is_builtin_cloud_mapper_key("mappers.custom.bridge.clean_session"));
+        }
+
+        #[test]
+        fn ignores_non_mapper_keys() {
+            assert!(!is_builtin_cloud_mapper_key("c8y.url"));
+            assert!(!is_builtin_cloud_mapper_key("device.id"));
+        }
+    }
 
     #[test]
     fn normalise_doc_comment_appends_period_and_space() {
