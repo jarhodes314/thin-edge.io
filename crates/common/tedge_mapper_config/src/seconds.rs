@@ -90,11 +90,9 @@ impl TryFrom<DeserializeTime> for SecondsOrHumanTime {
     }
 }
 
-impl TryFrom<&SecondsOrHumanTime> for DeserializeTime {
-    type Error = std::convert::Infallible;
-
-    fn try_from(value: &SecondsOrHumanTime) -> Result<Self, Self::Error> {
-        Ok(value.input.clone())
+impl From<&SecondsOrHumanTime> for DeserializeTime {
+    fn from(value: &SecondsOrHumanTime) -> Self {
+        value.input.clone()
     }
 }
 
