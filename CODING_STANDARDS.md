@@ -6,20 +6,29 @@ and mirror the checks in the `rust-review` skill (`.agents/skills/rust-review/SK
 Many of these points are things that AI-generated code tends to get wrong,
 so check them carefully whether you or an agent wrote the code.
 
-## Toolchain and formatting
+The rules fall into three groups:
+
+- Most sections below are **reviewed**: a reviewer raises a change that breaks them.
+- [Checked by CI](#checked-by-ci) lists rules that tooling enforces.
+  Reviewers don't raise these; CI reports them.
+- [Preferences for new code](#preferences-for-new-code) lists conventions to follow when writing code.
+  Reviewers don't raise these either, because existing code does not follow them consistently.
+
+## Checked by CI
 
 - The MSRV and edition are set in the root `Cargo.toml` (`rust-version`, `edition`).
   Read them rather than assuming; use any language feature the MSRV allows (e.g. `let`-`else`).
 - Format with `cargo +nightly fmt --all` (or `just format`).
   `rustfmt.toml` sets `imports_granularity = "Item"`, which is nightly-only:
   stable rustfmt prints a warning and leaves imports unformatted, so CI will disagree with you.
-- Imports are one item per `use` line, sorted.
+  Imports are one item per `use` line, sorted.
 - Run `just check` (clippy plus dependency checks) before pushing.
   `clippy.toml` forbids some types and methods; read the `reason` instead of suppressing the lint.
   For example, `reqwest::Client::new` and `reqwest::Client::builder` are banned
   because they ignore the configured root certificates; use `certificate::CloudRootCerts`.
-- Use inline format arguments: `format!("{key}")`, not `format!("{}", key)`.
-  Clippy allows both, but new code uses the inline form.
+- `unsafe` code is denied by the workspace lints.
+- New and changed test functions have no doc comments (`///`); see [Naming and layout](#naming-and-layout).
+  `just check-test-docs` runs the same check as CI.
 
 ## Correctness
 
@@ -32,7 +41,9 @@ so check them carefully whether you or an agent wrote the code.
 - No unchecked slice or array indexing where the index comes from input.
   Use `.get()` and handle `None`.
 - No `todo!()` or `unimplemented!()` in shipped code paths.
-- `unsafe` is forbidden (`#![forbid(unsafe_code)]`).
+- Avoid `unsafe`.
+  Where it cannot be avoided, the item carries `#[allow(unsafe_code)]`
+  and the block has a `// SAFETY:` comment stating why it is sound.
 
 ### Errors
 
@@ -129,7 +140,6 @@ Test code may use literal topics.
   Inline `//` comments explaining a non-obvious step are fine.
 - Unit tests go in an inline `#[cfg(test)] mod tests`,
   or in a `tests.rs` next to the module when they get long.
-- Helper functions go at the bottom of the test module, after all the tests.
 
 ### Speed and determinism
 
@@ -181,14 +191,17 @@ Test code may use literal topics.
 - Write plainly.
   Many contributors read English as a second language,
   so avoid idioms, allusions and invented names for things.
-- Doc comments use the third person ("Iterates over the entities", not "Iterate over the entities").
-  Short single-phrase comments have no trailing full stop;
-  multi-sentence docs use normal punctuation.
 - Document only what is not obvious.
   State a contract once, on the most visible item, and point to it from elsewhere.
 - Don't link to private items from public docs; rustdoc warns about it.
   Use a plain code span instead.
 - Markdown uses [semantic line breaks](https://sembr.org/).
+- Design documents, specs and guides describe the current design.
+  They don't refer to their own earlier versions ("earlier versions of this guide said…"),
+  because readers have not seen them.
+  The reasons for rejecting an alternative design are fine to include.
+- Design documents and specs state decisions.
+  Settle open questions before writing them down, rather than recording the uncertainty.
 
 ## Commits and pull requests
 
@@ -197,3 +210,20 @@ Test code may use literal topics.
 - Don't use GitHub auto-close keywords (`Fixes #123`); testers close issues by hand.
 - Address review feedback with `git commit --fixup=<sha>`
   and squash the fixups before merging.
+
+## Preferences for new code
+
+Follow these when writing code.
+Reviewers don't raise them.
+
+- Use inline format arguments: `format!("{key}")`, not `format!("{}", key)`.
+- Doc comments use the third person ("Iterates over the entities", not "Iterate over the entities").
+- Short single-phrase comments have no trailing full stop;
+  multi-sentence docs use normal punctuation.
+- In docs, a few short sentences read better than one long sentence with many clauses.
+  Use a bulleted list for items that really are separate (e.g. which signal triggers which action),
+  not to split up a single sentence.
+- Helper functions go at the bottom of the test module, after all the tests.
+- When working test-first, run the new tests before implementing the behaviour,
+  and check that they fail on their assertions.
+  A test that fails only because the code does not compile yet has not been checked.

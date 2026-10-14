@@ -224,7 +224,10 @@ Plugins are **separate executables** (not dynamically loaded libraries) that han
 
 ### General Guidelines
 
-Refer to @CODING_GUIDELINES.md
+Refer to @CODING_GUIDELINES.md and @CODING_STANDARDS.md.
+CODING_STANDARDS.md is what code is reviewed against.
+Follow all of it when writing code,
+including the "Preferences for new code" that reviewers don't raise.
 
 ### Actor Development Patterns
 
@@ -286,7 +289,7 @@ Use the `.agent/skills/add-integration-test` skill while creating new tests.
 
 - **Error handling**: Use `#[derive(Debug, thiserror::Error)]` with `#[from]` and `#[error(transparent)]` for error type composition
 - **Workspace deps**: All crates use `{ workspace = true }` for version, edition, and license; lints centralized with `[lints] workspace = true`
-- **Safety**: `#![forbid(unsafe_code)]` in all crates
+- **Safety**: `unsafe_code` is denied by the workspace lints
 - **Release profile**: `opt-level = "z"`, LTO enabled, symbol stripping (optimized for embedded)
 
 ## Markdown style
