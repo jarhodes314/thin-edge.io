@@ -182,7 +182,11 @@ A suggestion with that payoff is not polish, and it says what the payoff is.
 - Avoid needless allocation: `.clone()` on `Copy` types, redundant `.to_string()`,
   `Vec`s that are built only to be iterated once.
 - Derive what can be derived (`Debug`, `Clone`, `PartialEq`, `Default`, ...).
-- Keep visibility as narrow as possible; use `pub(crate)` for crate-internal items.
+- Give each type, field, and signature the least power its non-test callers use:
+  a lock rather than a channel, a concrete type rather than a one-implementation trait or generic,
+  a borrow rather than an `Arc`, `pub(crate)` rather than `pub`.
+  Each extra capability makes the reader check what relies on it.
+  Give tests a hook of their own; a `#[cfg(test)]` method on a non-test type usually marks surplus power.
 
 ## Comments and documentation
 
